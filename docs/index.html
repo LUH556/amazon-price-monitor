@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRICE MONITOR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:       #0a0c10;
+  --surface:  #111520;
+  --border:   #1e2535;
+  --accent:   #00e5a0;
+  --warn:     #ff6b35;
+  --info:     #3d9bff;
+  --muted:    #4a5468;
+  --text:     #c8d0e0;
+  --text-dim: #6b7a96;
+  --mono:     'Space Mono', monospace;
+  --sans:     'Noto Sans JP', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+/* ── HEADER ── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.logo {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+}
+.logo span { color: var(--text-dim); }
+.header-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: right;
+}
+#last-updated { color: var(--accent); }
+
+/* ── SUMMARY BAR ── */
+.summary-bar {
+  display: flex;
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.stat-item {
+  flex: 1;
+  background: var(--surface);
+  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.stat-value {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.stat-value.warn { color: var(--warn); }
+
+/* ── MAIN LAYOUT ── */
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── PRODUCT CARD ── */
+.product-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.product-card:hover { border-color: var(--muted); }
+.product-card.alert-active { border-color: var(--warn); }
+
+.card-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.product-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+}
+.product-asin {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 3px;
+  letter-spacing: 0.1em;
+}
+.card-actions { display: flex; gap: 8px; align-items: center; }
+
+.btn-buy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent);
+  color: #000;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 7px 14px;
+  border-radius: 3px;
+  text-decoration: none;
+  transition: opacity 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+.btn-buy:hover { opacity: 0.85; transform: translateY(-1px); }
+.btn-buy:active { transform: translateY(0); }
+
+.alert-badge {
+  display: none;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--warn);
+  color: #000;
+  padding: 4px 10px;
+  border-radius: 3px;
+  letter-spacing: 0.08em;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.product-card.alert-active .alert-badge { display: inline-flex; }
+
+/* ── PRICE GRID ── */
+.price-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.price-cell {
+  background: var(--surface);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.price-cell-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.price-cell-value {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+.price-cell-value.current { color: var(--info); }
+.price-cell-value.cheap   { color: var(--accent); }
+.price-cell-value.target  { color: var(--warn); }
+.price-cell-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* ── CHART AREA ── */
+.chart-area {
+  padding: 16px 20px 20px;
+  position: relative;
+}
+.chart-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+.chart-container {
+  position: relative;
+  height: 140px;
+}
+
+/* ── EMPTY / LOADING ── */
+.state-message {
+  text-align: center;
+  padding: 60px 20px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* ── FOOTER ── */
+footer {
+  text-align: center;
+  padding: 24px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 640px) {
+  header { padding: 14px 16px; }
+  .logo { font-size: 13px; }
+  .summary-bar { flex-wrap: wrap; }
+  .stat-item { flex: 1 1 50%; }
+  .price-grid { grid-template-columns: repeat(3, 1fr); }
+  .price-cell:nth-child(4),
+  .price-cell:nth-child(5) { grid-column: span 1; }
+  main { padding: 16px 12px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">PRICE<span>/</span>MONITOR</div>
+  <div class="header-meta">
+    LAST CHECK: <span id="last-updated">—</span><br>
+    <span id="product-count">— ITEMS</span>
+  </div>
+</header>
+
+<div class="summary-bar">
+  <div class="stat-item">
+    <div class="stat-label">MONITORING</div>
+    <div class="stat-value" id="s-total">—</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">ALERTS TODAY</div>
+    <div class="stat-value warn" id="s-alerts">—</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">AVG DISCOUNT</div>
+    <div class="stat-value" id="s-discount">—</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">DATA POINTS</div>
+    <div class="stat-value" id="s-points">—</div>
+  </div>
+</div>
+
+<main id="cards-container">
+  <div class="state-message" id="loading">Loading price data…</div>
+</main>
+
+<footer>
+  AMAZON PRICE MONITOR — PERSONAL USE / DATA UPDATED DAILY VIA GITHUB ACTIONS
+</footer>
+
+<script>
+const FMT = (n) => n != null ? `¥${Number(n).toLocaleString("ja-JP")}` : "—";
+
+async function loadJSON(path) {
+  const r = await fetch(path + "?t=" + Date.now());
+  if (!r.ok) throw new Error(`HTTP ${r.status} for ${path}`);
+  return r.json();
+}
+
+function pct(current, base) {
+  if (!base || base === 0) return null;
+  return Math.round(((base - current) / base) * 100);
+}
+
+function buildChart(ctx, records, targetPrice) {
+  const labels = records.map(r => r.date.slice(5));  // MM-DD
+  const totals  = records.map(r => r.total);
+  const minVal  = Math.min(...totals);
+  const maxVal  = Math.max(...totals);
+  const pad     = Math.max((maxVal - minVal) * 0.15, 100);
+
+  const datasets = [{
+    label: "合計価格",
+    data: totals,
+    borderColor: "#3d9bff",
+    backgroundColor: "rgba(61,155,255,0.08)",
+    borderWidth: 2,
+    pointRadius: records.length > 20 ? 0 : 3,
+    pointBackgroundColor: "#3d9bff",
+    tension: 0.3,
+    fill: true,
+  }];
+
+  if (targetPrice) {
+    datasets.push({
+      label: "目標価格",
+      data: new Array(records.length).fill(targetPrice),
+      borderColor: "rgba(255,107,53,0.6)",
+      borderWidth: 1.5,
+      borderDash: [5, 4],
+      pointRadius: 0,
+      fill: false,
+    });
+  }
+
+  return new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          display: datasets.length > 1,
+          labels: {
+            color: "#6b7a96",
+            font: { family: "'Space Mono', monospace", size: 10 },
+            boxWidth: 16,
+          }
+        },
+        tooltip: {
+          backgroundColor: "#111520",
+          borderColor: "#1e2535",
+          borderWidth: 1,
+          titleColor: "#c8d0e0",
+          bodyColor: "#6b7a96",
+          titleFont: { family: "'Space Mono', monospace", size: 11 },
+          bodyFont:  { family: "'Space Mono', monospace", size: 10 },
+          callbacks: {
+            label: (ctx) => `  ${ctx.dataset.label}: ¥${ctx.parsed.y.toLocaleString("ja-JP")}`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: "#4a5468", font: { family: "'Space Mono', monospace", size: 9 }, maxTicksLimit: 8 },
+          grid:  { color: "rgba(30,37,53,0.8)" },
+        },
+        y: {
+          min: Math.max(0, minVal - pad),
+          max: maxVal + pad,
+          ticks: {
+            color: "#4a5468",
+            font: { family: "'Space Mono', monospace", size: 9 },
+            callback: (v) => "¥" + v.toLocaleString("ja-JP"),
+          },
+          grid: { color: "rgba(30,37,53,0.8)" },
+        }
+      }
+    }
+  });
+}
+
+async function render() {
+  const container = document.getElementById("cards-container");
+  const loadingEl = document.getElementById("loading");
+
+  let products, history;
+  try {
+    [products, history] = await Promise.all([
+      loadJSON("data/products.json"),
+      loadJSON("data/price_history.json"),
+    ]);
+  } catch (e) {
+    loadingEl.textContent = `データ読み込みエラー: ${e.message}`;
+    return;
+  }
+
+  loadingEl.remove();
+
+  // ── Summary ──
+  let totalAlerts = 0;
+  let totalPoints = 0;
+  let discountSum = 0;
+  let discountCnt = 0;
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  products.forEach(p => {
+    const recs = history[p.asin] || [];
+    totalPoints += recs.length;
+    if (!recs.length) return;
+
+    const latest  = recs[recs.length - 1];
+    const minHist = Math.min(...recs.map(r => r.total));
+
+    if (p.target_price && latest.total <= p.target_price) totalAlerts++;
+    if (recs.length >= 2) {
+      const d = pct(latest.total, Math.max(...recs.map(r => r.total)));
+      if (d !== null) { discountSum += d; discountCnt++; }
+    }
+  });
+
+  document.getElementById("s-total").textContent    = products.length;
+  document.getElementById("s-alerts").textContent   = totalAlerts;
+  document.getElementById("s-discount").textContent = discountCnt ? discountSum + "%" : "—";
+  document.getElementById("s-points").textContent   = totalPoints;
+  document.getElementById("product-count").textContent = `${products.length} ITEMS`;
+
+  // ── Cards ──
+  products.forEach((product, idx) => {
+    const recs   = history[product.asin] || [];
+    const latest = recs.length ? recs[recs.length - 1] : null;
+    const minHist= recs.length ? Math.min(...recs.map(r => r.total)) : null;
+    const maxHist= recs.length ? Math.max(...recs.map(r => r.total)) : null;
+    const isAlert= latest && product.target_price && latest.total <= product.target_price;
+
+    const discount = (latest && maxHist) ? pct(latest.total, maxHist) : null;
+
+    const card = document.createElement("div");
+    card.className = "product-card" + (isAlert ? " alert-active" : "");
+
+    const buyUrl = `https://www.amazon.co.jp/dp/${product.asin}`;
+
+    card.innerHTML = `
+      <div class="card-header">
+        <div>
+          <div class="product-name">${product.name}</div>
+          <div class="product-asin">ASIN: ${product.asin}${product.memo ? "  ·  " + product.memo : ""}</div>
+        </div>
+        <div class="card-actions">
+          <span class="alert-badge">⚠ ALERT</span>
+          <a class="btn-buy" href="${buyUrl}" target="_blank" rel="noopener">→ AMAZON</a>
+        </div>
+      </div>
+      <div class="price-grid">
+        <div class="price-cell">
+          <div class="price-cell-label">現在価格</div>
+          <div class="price-cell-value current">${latest ? FMT(latest.total) : "—"}</div>
+          ${latest && latest.shipping > 0
+            ? `<div class="price-cell-sub">本体 ${FMT(latest.price)} + 送料 ${FMT(latest.shipping)}</div>`
+            : `<div class="price-cell-sub">${latest ? "送料無料" : ""}</div>`
+          }
+        </div>
+        <div class="price-cell">
+          <div class="price-cell-label">過去最安</div>
+          <div class="price-cell-value cheap">${FMT(minHist)}</div>
+          <div class="price-cell-sub">${recs.length ? recs.find(r => r.total === minHist)?.date || "" : ""}</div>
+        </div>
+        <div class="price-cell">
+          <div class="price-cell-label">過去最高</div>
+          <div class="price-cell-value">${FMT(maxHist)}</div>
+          <div class="price-cell-sub">&nbsp;</div>
+        </div>
+        <div class="price-cell">
+          <div class="price-cell-label">目標価格</div>
+          <div class="price-cell-value target">${product.target_price ? FMT(product.target_price) : "未設定"}</div>
+          <div class="price-cell-sub">${discount !== null ? `最高比 -${discount}%` : "&nbsp;"}</div>
+        </div>
+        <div class="price-cell">
+          <div class="price-cell-label">記録数</div>
+          <div class="price-cell-value">${recs.length}</div>
+          <div class="price-cell-sub">DAY${recs.length !== 1 ? "S" : ""}</div>
+        </div>
+      </div>
+      <div class="chart-area">
+        <div class="chart-title">PRICE HISTORY — TOTAL (INCL. SHIPPING)</div>
+        <div class="chart-container">
+          ${recs.length >= 2
+            ? `<canvas id="chart-${idx}"></canvas>`
+            : `<div class="state-message" style="padding:20px 0;font-size:11px;">チェック回数が2回以上になるとグラフが表示されます</div>`
+          }
+        </div>
+      </div>`;
+
+    container.appendChild(card);
+
+    if (recs.length >= 2) {
+      const ctx = document.getElementById(`chart-${idx}`).getContext("2d");
+      buildChart(ctx, recs, product.target_price);
+    }
+  });
+
+  // ── Last updated ──
+  const allDates = Object.values(history).flat().map(r => r.date).sort();
+  const lastDate = allDates.length ? allDates[allDates.length - 1] : null;
+  document.getElementById("last-updated").textContent = lastDate || "—";
+}
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+name: Amazon Price Monitor
+
+on:
+  schedule:
+    # 毎日 JST 10:00 に実行（UTC 01:00）
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+    # GitHub Actions 画面から手動実行も可能
+
+permissions:
+  contents: write   # price_history.json を commit するために必要
+
+jobs:
+  check-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. リポジトリをチェックアウト ──────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Python セットアップ ─────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ── 3. 依存ライブラリのインストール ──────────────────────────
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests beautifulsoup4 lxml
+
+      # ── 4. 価格チェック実行 ──────────────────────────────────────
+      - name: Run price check
+        env:
+          GMAIL_USER:        ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NOTIFY_EMAIL:      ${{ secrets.NOTIFY_EMAIL }}
+        run: python scripts/check_prices.py
+
+      # ── 5. 価格履歴を git commit & push ─────────────────────────
+      - name: Commit and push price history
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name  "github-actions[bot]"
+          git add docs/data/price_history.json
+          git diff --staged --quiet && echo "No changes." || \
+            git commit -m "chore: update price history $(date -u '+%Y-%m-%d')" && git push

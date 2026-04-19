@@ -1,0 +1,14 @@
+[
+  {
+    "asin": "B0XXXXXXXX",
+    "name": "商品名をここに入力",
+    "target_price": 2000,
+    "memo": "メモ欄（任意）"
+  },
+  {
+    "asin": "B0YYYYYYYY",
+    "name": "別の商品名",
+    "target_price": 5000,
+    "memo": ""
+  }
+]
