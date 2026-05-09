@@ -40,6 +40,15 @@ jobs:
           NOTIFY_EMAIL:      ${{ secrets.NOTIFY_EMAIL }}
         run: python scripts/check_prices.py
 
+      # ── 4b. デバッグHTML をArtifactsに保存（診断用） ─────────────
+      - name: Upload debug HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-html
+          path: debug_html/
+          retention-days: 3
+
       # ── 5. 価格履歴を git commit & push ─────────────────────────
       - name: Commit and push price history
         run: |
