@@ -30,10 +30,15 @@ JST = timezone(timedelta(hours=9))
 
 # ---- 価格パース ----
 def parse_price(text: str) -> int | None:
-    """'￥1,980' や '1980円' などから整数を取り出す"""
-    text = text.replace(",", "").replace("\u00a0", "")
-    m = re.search(r"[\u00a5\uffe5]?\s*(\d+)", text)
-    return int(m.group(1)) if m else None
+    """'￥1,980' や '1980円' などから価格整数を取り出す。
+    複数の数値が含まれる場合は最大値を返す（端数・単価の誤取得を防ぐ）。
+    100円未満は価格として無効とみなす。
+    """
+    text = text.replace(",", "").replace("\u00a0", "").replace(" ", "")
+    candidates = [int(m) for m in re.findall(r"\d+", text)]
+    # 100円以上の候補のみ対象
+    valid = [c for c in candidates if c >= 100]
+    return max(valid) if valid else None
 
 
 # ---- Amazon 価格取得 ----
@@ -72,22 +77,34 @@ def fetch_price(asin: str, session: requests.Session) -> tuple[int | None, int]:
     price = None
 
     # ---- 価格セレクタ（優先順） ----
-    price_selectors = [
+    # 高精度セレクタを先に試す（単一要素）
+    priority_selectors = [
         "#corePrice_feature_div .a-price .a-offscreen",
         "#apex_offerDisplay_desktop .a-price .a-offscreen",
         "#newBuyBoxPrice",
         "#price_inside_buybox",
         "#priceblock_ourprice",
         "#priceblock_dealprice",
-        ".a-price .a-offscreen",
     ]
-    for sel in price_selectors:
+    for sel in priority_selectors:
         el = soup.select_one(sel)
         if el:
             candidate = parse_price(el.get_text(strip=True))
-            if candidate and candidate > 0:
+            if candidate and candidate >= 100:
                 price = candidate
                 break
+
+    # 上記で取れなかった場合：.a-offscreen の全候補から最大値を採用
+    # （最小値は単価・端数の可能性があるため最大値を使う）
+    if price is None:
+        candidates = []
+        for el in soup.select(".a-price .a-offscreen"):
+            c = parse_price(el.get_text(strip=True))
+            if c and c >= 100:
+                candidates.append(c)
+        if candidates:
+            price = max(candidates)
+            print(f"  [INFO] Price from .a-offscreen max candidates={candidates} → ¥{price}")
 
     if price is None:
         print(f"  [WARN] Price element not found for ASIN={asin}")
