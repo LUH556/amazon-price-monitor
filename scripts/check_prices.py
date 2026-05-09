@@ -30,15 +30,27 @@ JST = timezone(timedelta(hours=9))
 
 # ---- 価格パース ----
 def parse_price(text: str) -> int | None:
-    """'￥1,980' や '1980円' などから価格整数を取り出す。
-    複数の数値が含まれる場合は最大値を返す（端数・単価の誤取得を防ぐ）。
-    100円未満は価格として無効とみなす。
+    """価格文字列から円整数を取り出す。
+    ・￥/¥ 付きの数値を優先（円表記）
+    ・円表記がなければ整数部分の最大値を返す
+    ・100円未満は無効
     """
-    text = text.replace(",", "").replace("\u00a0", "").replace(" ", "")
-    candidates = [int(m) for m in re.findall(r"\d+", text)]
-    # 100円以上の候補のみ対象
-    valid = [c for c in candidates if c >= 100]
-    return max(valid) if valid else None
+    text_clean = text.replace(",", "").replace("\u00a0", "").replace(" ", "")
+
+    # 円記号付きの数値を最優先（￥1234 or ¥1234）
+    jpy_matches = re.findall(r"[￥¥]\s*(\d+)", text_clean)
+    if jpy_matches:
+        valid = [int(v) for v in jpy_matches if int(v) >= 100]
+        return max(valid) if valid else None
+
+    # USD等の場合は整数部のみ取得（USD12.95 → 12 → 100未満で無効になる場合あり）
+    # 小数点付き数値の整数部を取得
+    float_matches = re.findall(r"(\d+)(?:\.\d+)?", text_clean)
+    if float_matches:
+        valid = [int(v) for v in float_matches if int(v) >= 100]
+        return max(valid) if valid else None
+
+    return None
 
 
 # ---- Amazon 価格取得 ----
@@ -47,7 +59,8 @@ def fetch_price(asin: str, session: requests.Session) -> tuple[int | None, int]:
     (price, shipping) を返す。
     取得できない場合は (None, 0)。
     """
-    url = f"https://www.amazon.co.jp/dp/{asin}"
+    # 日本向けURLパラメータを付与（海外IPからのJP価格表示を強制）
+    url = f"https://www.amazon.co.jp/dp/{asin}?th=1&psc=1"
 
     headers = {
         "User-Agent": (
@@ -55,7 +68,7 @@ def fetch_price(asin: str, session: requests.Session) -> tuple[int | None, int]:
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/124.0.0.0 Safari/537.36"
         ),
-        "Accept-Language": "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Language": "ja-JP,ja;q=0.9",
         "Accept": (
             "text/html,application/xhtml+xml,application/xml;"
             "q=0.9,image/avif,image/webp,*/*;q=0.8"
@@ -64,6 +77,8 @@ def fetch_price(asin: str, session: requests.Session) -> tuple[int | None, int]:
         "Referer": "https://www.amazon.co.jp/",
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
+        # 日本のAmazonとして認識させるCookie
+        "Cookie": "i18n-prefs=JPY; sp-cdn=\"L5Z9:JP\"; lc-acbjp=ja_JP",
     }
 
     try:
@@ -86,7 +101,9 @@ def fetch_price(asin: str, session: requests.Session) -> tuple[int | None, int]:
     offscreen_els = soup.select(".a-price .a-offscreen")
     print(f"  [DEBUG] .a-offscreen count={len(offscreen_els)}")
     for i, el in enumerate(offscreen_els[:5]):
-        print(f"  [DEBUG]   [{i}] '{el.get_text(strip=True)}'")
+        txt = el.get_text(strip=True)
+        usd_flag = " *** USD ***" if "USD" in txt else ""
+        print(f"  [DEBUG]   [{i}] '{txt}'{usd_flag}")
 
     # ---- 価格セレクタ（優先順） ----
     # 高精度セレクタを先に試す（単一要素）
