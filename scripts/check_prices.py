@@ -106,14 +106,23 @@ def fetch_price(asin: str, session: requests.Session) -> tuple[int | None, int]:
         print(f"  [DEBUG]   [{i}] '{txt}'{usd_flag}")
 
     # ---- 価格セレクタ（優先順） ----
-    # 高精度セレクタを先に試す（単一要素）
+    # Amazonのbuyboxエリアから直接取得するセレクタ群
+    # select_one = 最初の1件のみ取得（複数ある場合の誤取得を防ぐ）
     priority_selectors = [
+        # 2024年以降の主流レイアウト
+        "#corePriceDisplay_desktop_feature_div .a-price .a-offscreen",
         "#corePrice_feature_div .a-price .a-offscreen",
-        "#apex_offerDisplay_desktop .a-price .a-offscreen",
+        # サブスクリプション価格ではなく通常価格
+        "#apex_offerDisplay_desktop .a-price[data-a-color='base'] .a-offscreen",
+        # 旧来のID
         "#newBuyBoxPrice",
         "#price_inside_buybox",
         "#priceblock_ourprice",
         "#priceblock_dealprice",
+        # buyboxエリア限定の .a-offscreen（最初の1件 = 本体価格）
+        "#buyNewSection .a-price .a-offscreen",
+        "#buybox .a-price .a-offscreen",
+        "#rightCol .a-price .a-offscreen",
     ]
     for sel in priority_selectors:
         el = soup.select_one(sel)
@@ -121,19 +130,18 @@ def fetch_price(asin: str, session: requests.Session) -> tuple[int | None, int]:
             candidate = parse_price(el.get_text(strip=True))
             if candidate and candidate >= 100:
                 price = candidate
+                print(f"  [DEBUG] Matched selector: {sel} → ¥{price}")
                 break
 
-    # 上記で取れなかった場合：.a-offscreen の全候補から最大値を採用
-    # （最小値は単価・端数の可能性があるため最大値を使う）
+    # フォールバック：全 .a-offscreen から「最初の¥100以上」を採用
+    # （最大値ではなく最初の値 = ページ上部の本体価格である可能性が高い）
     if price is None:
-        candidates = []
         for el in soup.select(".a-price .a-offscreen"):
             c = parse_price(el.get_text(strip=True))
             if c and c >= 100:
-                candidates.append(c)
-        if candidates:
-            price = max(candidates)
-            print(f"  [INFO] Price from .a-offscreen max candidates={candidates} → ¥{price}")
+                price = c
+                print(f"  [INFO] Fallback: first valid .a-offscreen → ¥{price}")
+                break
 
     if price is None:
         print(f"  [WARN] Price element not found for ASIN={asin}")
