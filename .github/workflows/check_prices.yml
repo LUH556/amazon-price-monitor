@@ -1,11 +1,9 @@
 name: Amazon Price Monitor
 
 on:
-  schedule:
-    # 毎日 JST 10:00 に実行（UTC 01:00）
-    - cron: "0 1 * * *"
-  workflow_dispatch:
-    # GitHub Actions 画面から手動実行も可能
+  # schedule:
+  #   - cron: "0 1 * * *"
+  workflow_dispatch:  # 手動実行は残しておく
 
 permissions:
   contents: write   # price_history.json を commit するために必要
