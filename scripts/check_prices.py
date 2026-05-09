@@ -76,6 +76,18 @@ def fetch_price(asin: str, session: requests.Session) -> tuple[int | None, int]:
     soup = BeautifulSoup(resp.content, "lxml")
     price = None
 
+    # ---- デバッグ：ページ状態確認 ----
+    title_el = soup.select_one("title")
+    page_title = title_el.get_text(strip=True) if title_el else "(no title)"
+    print(f"  [DEBUG] HTTP={resp.status_code} title={page_title[:80]}")
+    body_text = soup.get_text()
+    if "robot" in body_text.lower() or "captcha" in body_text.lower():
+        print(f"  [DEBUG] *** ROBOT/CAPTCHA PAGE DETECTED ***")
+    offscreen_els = soup.select(".a-price .a-offscreen")
+    print(f"  [DEBUG] .a-offscreen count={len(offscreen_els)}")
+    for i, el in enumerate(offscreen_els[:5]):
+        print(f"  [DEBUG]   [{i}] '{el.get_text(strip=True)}'")
+
     # ---- 価格セレクタ（優先順） ----
     # 高精度セレクタを先に試す（単一要素）
     priority_selectors = [
