@@ -91,6 +91,14 @@ def fetch_price(asin: str, session: requests.Session) -> tuple[int | None, int]:
     soup = BeautifulSoup(resp.content, "lxml")
     price = None
 
+    # ---- デバッグ：HTMLをファイル保存（Artifactsで確認用） ----
+    debug_dir = os.path.join(BASE_DIR, "debug_html")
+    os.makedirs(debug_dir, exist_ok=True)
+    html_path = os.path.join(debug_dir, f"{asin}.html")
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(resp.text)
+    print(f"  [DEBUG] HTML saved → debug_html/{asin}.html ({len(resp.content)} bytes)")
+
     # ---- デバッグ：ページ状態確認 ----
     title_el = soup.select_one("title")
     page_title = title_el.get_text(strip=True) if title_el else "(no title)"
@@ -98,12 +106,25 @@ def fetch_price(asin: str, session: requests.Session) -> tuple[int | None, int]:
     body_text = soup.get_text()
     if "robot" in body_text.lower() or "captcha" in body_text.lower():
         print(f"  [DEBUG] *** ROBOT/CAPTCHA PAGE DETECTED ***")
+
+    # buybox/価格エリアのID存在確認
+    for check_id in ["corePriceDisplay_desktop_feature_div", "corePrice_feature_div",
+                     "apex_offerDisplay_desktop", "buybox", "rightCol"]:
+        el = soup.find(id=check_id)
+        print(f"  [DEBUG] #{check_id}: {'EXISTS' if el else 'NOT FOUND'}")
+
     offscreen_els = soup.select(".a-price .a-offscreen")
     print(f"  [DEBUG] .a-offscreen count={len(offscreen_els)}")
-    for i, el in enumerate(offscreen_els[:5]):
+    for i, el in enumerate(offscreen_els[:8]):
         txt = el.get_text(strip=True)
-        usd_flag = " *** USD ***" if "USD" in txt else ""
-        print(f"  [DEBUG]   [{i}] '{txt}'{usd_flag}")
+        # 親要素のIDを確認
+        parent_ids = []
+        p = el.parent
+        for _ in range(6):
+            if p and p.get("id"):
+                parent_ids.append(p.get("id"))
+            p = p.parent if p else None
+        print(f"  [DEBUG]   [{i}] '{txt}' parents={parent_ids[:3]}")
 
     # ---- 価格セレクタ（優先順） ----
     # Amazonのbuyboxエリアから直接取得するセレクタ群
